@@ -441,6 +441,46 @@ const EventCalculator: React.FC = () => {
           </Button>
         </div>
 
+        {/* Sticky Budget Summary for Mobile/Tablet */}
+        <div className="lg:hidden sticky top-0 z-50 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-[#0B0D13]/80 backdrop-blur-lg transform transition-all duration-300 ease-in-out">
+          <div className="grid grid-cols-1 gap-2">
+            {/* Net Profit - Featured at top */}
+            <div className={`bg-gradient-to-br ${profit >= 0 ? 'from-[#1A2428]/90 to-[#1A2C25]/90' : 'from-[#2C1A1A]/90 to-[#1A1D24]/90'} rounded-xl p-3 border border-[#2D3139] shadow-xl relative overflow-hidden`}>
+              <div className="flex flex-col relative z-10">
+                <span className="text-[#9CA3AF] text-sm mb-1">Net Profit</span>
+                <span className={`text-xl sm:text-2xl font-bold tracking-tight ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
+                  ${profit.toLocaleString()}
+                </span>
+              </div>
+              {/* Decorative elements */}
+              <div className={`absolute top-0 right-0 w-24 h-24 opacity-10 transform translate-x-12 -translate-y-6 rounded-full blur-2xl ${profit >= 0 ? 'bg-[#4aba91]' : 'bg-[#dc6868]'}`} />
+            </div>
+
+            {/* Income and Expenses Row */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Total Income */}
+              <div className="bg-[#1A1D24]/90 rounded-lg p-2 border border-[#2D3139] shadow-lg">
+                <div className="flex flex-col">
+                  <span className="text-[#9CA3AF] text-xs">Total Income</span>
+                  <span className="text-[#4aba91] text-sm font-medium">
+                    ${totalIncome.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Total Expenses */}
+              <div className="bg-[#1A1D24]/90 rounded-lg p-2 border border-[#2D3139] shadow-lg">
+                <div className="flex flex-col">
+                  <span className="text-[#9CA3AF] text-xs">Total Expenses</span>
+                  <span className="text-[#dc6868] text-sm font-medium">
+                    ${totalExpenses.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Budget Report */}
         <div className="bg-[#1D2027] rounded-lg border border-[#2D3139]">
           <div className="p-4 space-y-4">
@@ -508,10 +548,10 @@ const EventCalculator: React.FC = () => {
                 </div>
               </div>
 
-              {/* Budget Summary Cards */}
-              <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+              {/* Budget Summary Cards - Desktop Only */}
+              <div className="hidden lg:grid lg:col-span-4 grid-cols-1 gap-3">
                 {/* Net Profit - Moved to top for emphasis */}
-                <div className={`order-first col-span-1 sm:col-span-3 lg:col-span-1 bg-gradient-to-br ${profit >= 0 ? 'from-[#1A2428] to-[#1A2C25]' : 'from-[#2C1A1A] to-[#1A1D24]'} rounded-xl p-4 border border-[#2D3139] shadow-xl relative overflow-hidden`}>
+                <div className={`order-first col-span-1 bg-gradient-to-br ${profit >= 0 ? 'from-[#1A2428] to-[#1A2C25]' : 'from-[#2C1A1A] to-[#1A1D24]'} rounded-xl p-4 border border-[#2D3139] shadow-xl relative overflow-hidden`}>
                   <div className="flex flex-col relative z-10">
                     <span className="text-[#9CA3AF] text-sm mb-1">Net Profit</span>
                     <span className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
