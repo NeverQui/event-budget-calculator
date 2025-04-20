@@ -52,6 +52,165 @@ const EXPENSE_COLORS = {
   'Miscellaneous': '#D4A5A5'
 };
 
+// Add these constants at the top level
+const BASE_TICKET_PRICE = 50; // Reference price point for core expense calculations
+const CORE_EXPENSE_RULES = {
+  'Venue Rental': {
+    baseRate: 15, // Reduced from 50
+    minValue: 500,
+    maxValue: 10000,
+    scaleThreshold: 100, // Point at which scaling rate reduces
+    scaleRate: 0.7 // Rate multiplier for tickets above threshold
+  },
+  'Catering': {
+    baseRate: 12, // Reduced from 35
+    minValue: 300,
+    maxValue: 15000,
+    scaleThreshold: 100,
+    scaleRate: 0.6
+  },
+  'Equipment': {
+    baseRate: 5, // Reduced from 10
+    minValue: 200,
+    maxValue: 5000,
+    scaleThreshold: 100,
+    scaleRate: 0.5
+  },
+  'Staffing': {
+    baseRate: 8, // Reduced from 20
+    minValue: 300,
+    maxValue: 8000,
+    scaleThreshold: 100,
+    scaleRate: 0.8
+  }
+};
+
+const MARKETING_RULES = {
+  ticketPriceScale: 0.02, // Only 2% of price difference affects marketing
+  sponsorshipContribution: 0.02, // 2% of sponsorships
+  donationContribution: 0, // Donations no longer affect marketing
+  merchandiseContribution: 0.01, // 1% of merchandise
+  baseValue: 300,
+  minValue: 200,
+  maxValue: 10000
+};
+
+const MISC_RULES = {
+  sponsorshipContribution: 0.02, // 2% of sponsorships
+  donationContribution: 0, // Donations no longer affect miscellaneous
+  merchandiseContribution: 0.01, // 1% of merchandise
+  baseValue: 150,
+  minValue: 100,
+  maxValue: 5000
+};
+
+// Replace the old constants with new cost model rules
+const VENUE_TIERS = [
+  { maxTickets: 150, cost: 2000 },
+  { maxTickets: 300, cost: 3500 },
+  { maxTickets: 500, cost: 6000 },
+  { maxTickets: 1000, cost: 10000 },
+  { maxTickets: Infinity, cost: 15000 }
+];
+
+const COST_RULES = {
+  catering: {
+    baseCost: 2000,
+    maxCost: 8000,
+    scaleRate: 0.02 // 2% increase per 10 tickets
+  },
+  staffing: {
+    baseCost: 1500,
+    maxCost: 6000,
+    scaleRate: 0.015 // 1.5% increase per 10 tickets
+  },
+  equipment: {
+    baseCost: 1000,
+    maxCost: 5000,
+    scaleRate: 0.01 // 1% increase per 10 tickets
+  },
+  marketing: {
+    baseCost: 1000,
+    perTicketAmount: 2, // Fixed $2 per ticket instead of percentage
+    maxCost: 10000
+  },
+  miscellaneous: {
+    percentageOfOtherExpenses: 0.05 // 5% of other expenses
+  }
+};
+
+type EventSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE' | 'HUGE';
+
+type ExpenseCategory = 'Venue Rental' | 'Catering' | 'Equipment' | 'Staffing' | 'Marketing' | 'Miscellaneous';
+
+interface EventSizeConfig {
+  maxTickets: number;
+  name: string;
+}
+
+interface CostConfig {
+  SMALL: number;
+  MEDIUM: number;
+  LARGE: number;
+  XLARGE: number;
+  HUGE: number;
+}
+
+// Define event size categories
+const EVENT_SIZES: Record<EventSize, EventSizeConfig> = {
+  SMALL: { maxTickets: 100, name: 'Small Event' },
+  MEDIUM: { maxTickets: 250, name: 'Medium Event' },
+  LARGE: { maxTickets: 500, name: 'Large Event' },
+  XLARGE: { maxTickets: 1000, name: 'Extra Large Event' },
+  HUGE: { maxTickets: Infinity, name: 'Huge Event' }
+};
+
+// Fixed costs for each expense category based on event size
+const FIXED_COSTS: Record<ExpenseCategory, CostConfig> = {
+  'Venue Rental': {
+    SMALL: 2000,
+    MEDIUM: 3500,
+    LARGE: 6000,
+    XLARGE: 10000,
+    HUGE: 15000
+  },
+  'Catering': {
+    SMALL: 1500,
+    MEDIUM: 3000,
+    LARGE: 5000,
+    XLARGE: 8000,
+    HUGE: 12000
+  },
+  'Equipment': {
+    SMALL: 1000,
+    MEDIUM: 2000,
+    LARGE: 3500,
+    XLARGE: 5000,
+    HUGE: 7500
+  },
+  'Staffing': {
+    SMALL: 1200,
+    MEDIUM: 2400,
+    LARGE: 4000,
+    XLARGE: 6000,
+    HUGE: 9000
+  },
+  'Marketing': {
+    SMALL: 1000,
+    MEDIUM: 2000,
+    LARGE: 3500,
+    XLARGE: 5000,
+    HUGE: 7500
+  },
+  'Miscellaneous': {
+    SMALL: 500,
+    MEDIUM: 1000,
+    LARGE: 2000,
+    XLARGE: 3000,
+    HUGE: 4500
+  }
+};
+
 const EventCalculator: React.FC = () => {
   const [isAutoBudget, setIsAutoBudget] = useState(false);
   const [manualExpenses, setManualExpenses] = useState<BudgetItem[]>([]);
@@ -84,7 +243,6 @@ const EventCalculator: React.FC = () => {
     const timeDiff = currentTime - lastClickTime;
     
     if (timeDiff < DOUBLE_CLICK_DELAY) {
-      // Double click detected
       e.preventDefault();
       callback();
     }
@@ -92,21 +250,65 @@ const EventCalculator: React.FC = () => {
     setLastClickTime(currentTime);
   };
 
-  // Store manual expenses when switching to auto-budget
+  // Update the useEffect for auto-budget calculations
   useEffect(() => {
-    if (isAutoBudget) {
-      setManualExpenses([...expenses]);
-      // Calculate initial auto-budget values but don't lock them
-      const totalIncome = incomes.reduce((sum, item) => sum + item.value, 0);
-      const newExpenses = expenses.map(expense => ({
-        ...expense,
-        value: roundToNearest5(Math.round((BUDGET_PERCENTAGES[expense.name as keyof typeof BUDGET_PERCENTAGES] / 100) * totalIncome))
-      }));
+    if (isAutoBudget && !manualExpenses.length) { // Only auto-calculate if no manual adjustments
+      // Base costs for each expense category
+      const BASE_COSTS = {
+        'Venue Rental': 2000,
+        'Catering': 1500,
+        'Equipment': 1000,
+        'Staffing': 1200,
+        'Marketing': 1000,
+        'Miscellaneous': 500
+      };
+      
+      // Scale factors for each category (how much they grow with tickets)
+      const SCALE_FACTORS = {
+        'Venue Rental': 0.4,  // Grows moderately with attendance
+        'Catering': 0.5,     // Grows fastest with attendance
+        'Marketing': 0.25,   // Grows slower with attendance
+        'Miscellaneous': 0.2 // Grows slowest with attendance
+      };
+
+      const newExpenses = expenses.map(expense => {
+        const baseCost = BASE_COSTS[expense.name as keyof typeof BASE_COSTS];
+        
+        // Only apply ticket scaling to specific expenses
+        if (['Venue Rental', 'Catering', 'Marketing', 'Miscellaneous'].includes(expense.name)) {
+          const scaleFactor = SCALE_FACTORS[expense.name as keyof typeof SCALE_FACTORS];
+          let value = Math.round(
+            baseCost * Math.pow(1 + (ticketDetails.quantity / 100), scaleFactor)
+          );
+          
+          // Add marketing adjustment for ticket price
+          if (expense.name === 'Marketing') {
+            const priceDifference = Math.max(0, ticketDetails.price - BASE_TICKET_PRICE);
+            const priceAdjustment = Math.round(priceDifference * ticketDetails.quantity * 0.02);
+            value += priceAdjustment;
+          }
+          
+          return {
+            ...expense,
+            value: Math.min(expense.max, value)
+          };
+        } else {
+          // Equipment and Staffing remain at base cost
+          return {
+            ...expense,
+            value: baseCost
+          };
+        }
+      });
+      
       setExpenses(newExpenses);
-    } else if (manualExpenses.length > 0) {
-      setExpenses(manualExpenses);
     }
-  }, [isAutoBudget, incomes]);
+  }, [
+    isAutoBudget,
+    ticketDetails.quantity,
+    ticketDetails.price,
+    manualExpenses.length // Add dependency to track manual changes
+  ]);
 
   // Update ticket sales and auto-budget calculations
   useEffect(() => {
@@ -115,16 +317,7 @@ const EventCalculator: React.FC = () => {
     const ticketSalesIndex = newIncomes.findIndex(income => income.name === 'Ticket Sales');
     newIncomes[ticketSalesIndex].value = totalTicketSales;
     setIncomes(newIncomes);
-
-    if (isAutoBudget) {
-      const totalIncome = newIncomes.reduce((sum, item) => sum + item.value, 0);
-      const newExpenses = expenses.map(expense => ({
-        ...expense,
-        value: roundToNearest5(Math.round((BUDGET_PERCENTAGES[expense.name as keyof typeof BUDGET_PERCENTAGES] / 100) * totalIncome))
-      }));
-      setExpenses(newExpenses);
-    }
-  }, [ticketDetails, isAutoBudget && incomes.filter(i => i.name !== 'Ticket Sales').map(i => i.value).join(',')]);
+  }, [ticketDetails]); // Only depends on ticketDetails now
 
   const roundToNearestStep = (value: number, step: number) => {
     // Special handling for step size of 5
@@ -143,12 +336,28 @@ const EventCalculator: React.FC = () => {
     const expense = newExpenses[index];
     expense.value = Math.min(Math.max(value, expense.min), expense.max);
     setExpenses(newExpenses);
+    
+    // Store manual adjustments when in auto-budget mode
+    if (isAutoBudget) {
+      setManualExpenses(newExpenses);
+    }
   };
 
   const handleExpenseDoubleClick = (index: number) => {
     const expense = expenses[index];
-    const roundedValue = roundToNearestStep(expense.value, expense.step);
-    handleExpenseChange(index, roundedValue);
+    const currentValue = expense.value;
+    const step = expense.step;
+    
+    // Calculate both round up and round down values
+    const roundDownValue = Math.floor(currentValue / step) * step;
+    const roundUpValue = Math.ceil(currentValue / step) * step;
+    
+    // Choose the closer value
+    const newValue = (currentValue - roundDownValue) <= (roundUpValue - currentValue) 
+      ? roundDownValue 
+      : roundUpValue;
+    
+    handleExpenseChange(index, newValue);
   };
 
   const handleIncomeChange = (index: number, value: number) => {
@@ -192,19 +401,44 @@ const EventCalculator: React.FC = () => {
     setIncomes(incomes.map(i => ({ ...i, value: 0 })));
     setTicketDetails({ quantity: 50, price: 10 });
     setIsAutoBudget(false);
+    setManualExpenses([]); // Clear manual adjustments
+  };
+
+  // Update tooltip content to reflect new fixed-cost model
+  const getExpenseTooltip = (expenseName: string) => {
+    const costs = FIXED_COSTS[expenseName as ExpenseCategory];
+    return `Fixed costs based on event size:
+            • Small (≤100): $${costs.SMALL.toLocaleString()}
+            • Medium (≤250): $${costs.MEDIUM.toLocaleString()}
+            • Large (≤500): $${costs.LARGE.toLocaleString()}
+            • XLarge (≤1000): $${costs.XLARGE.toLocaleString()}
+            • Huge (1000+): $${costs.HUGE.toLocaleString()}`;
+  };
+
+  // Update the Auto-Budget switch tooltip
+  const getAutoBudgetTooltip = () => {
+    return `Expenses scale differently with ticket quantity:
+            • Catering scales fastest with attendance
+            • Venue rental scales moderately
+            • Marketing scales slower and increases with ticket price
+            • Equipment and staffing remain fixed
+            • Miscellaneous scales slowest
+            
+            All scaling costs grow exponentially but at different rates.
+            You can still manually adjust values in auto-budget mode.`;
   };
 
   return (
     <div className="min-h-screen bg-[#0B0D13]">
       <style>{inputStyles}</style>
-      <div className="h-full max-w-7xl mx-auto flex flex-col space-y-4 p-4">
+      <div className="h-full max-w-7xl mx-auto flex flex-col space-y-3 p-3 sm:space-y-4 sm:p-4">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-[#E5E7EB]">Event Budget Calculator</h1>
+          <h1 className="text-base sm:text-lg font-semibold text-[#E5E7EB]">Event Budget Calculator</h1>
           <Button
             variant="outline"
             onClick={resetAll}
-            className="h-8 px-3 text-xs bg-transparent border-[#2D3139] text-[#E5E7EB] hover:bg-[#1D2027]"
+            className="h-7 sm:h-8 px-2 sm:px-3 text-xs bg-transparent border-[#2D3139] text-[#E5E7EB] hover:bg-[#1D2027]"
           >
             Reset All
           </Button>
@@ -212,85 +446,101 @@ const EventCalculator: React.FC = () => {
 
         {/* Budget Report */}
         <div className="bg-[#1D2027] rounded-lg border border-[#2D3139]">
-          <div className="p-6 space-y-6">
+          <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
             {/* Two-tone Bar Graph */}
-            <div className="h-3 flex rounded-sm overflow-hidden bg-[#2D3139] transition-all duration-200">
+            <div className="h-2 sm:h-3 flex rounded-sm overflow-hidden bg-[#2D3139] transition-all duration-200">
               <div 
-                className="bg-[#EF4444] transition-all duration-200" 
+                className="bg-[#dc6868] transition-all duration-200" 
                 style={{ width: `${expensePercentage}%` }} 
               />
               {profit > 0 && (
                 <div 
-                  className="bg-[#10B981] transition-all duration-200" 
+                  className="bg-[#4aba91] transition-all duration-200" 
                   style={{ width: `${profitPercentage}%` }} 
                 />
               )}
             </div>
 
-            {/* Budget Summary Grid */}
-            <div className="grid grid-cols-12 gap-4">
-              {/* Total Income */}
-              <div className="col-span-3 bg-[#1A1D24] rounded-lg p-4 border border-[#2D3139]">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-sm text-[#9CA3AF]">Total Income</span>
-                  <span className="text-2xl font-medium text-[#10B981]">
-                    ${totalIncome.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Total Expenses */}
-              <div className="col-span-3 bg-[#1A1D24] rounded-lg p-4 border border-[#2D3139]">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-sm text-[#9CA3AF]">Total Expenses</span>
-                  <span className="text-2xl font-medium text-[#EF4444]">
-                    ${totalExpenses.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Net Profit */}
-              <div className="col-span-6 bg-[#1A1D24] rounded-lg p-4 border border-[#2D3139]">
-                <div className="flex flex-col space-y-1">
-                  <span className="text-sm text-[#9CA3AF]">Net Profit</span>
-                  <span className={`text-4xl font-semibold ${profit >= 0 ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>
-                    ${profit.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Detailed Budget Report */}
-            <div className="grid grid-cols-12 gap-4 text-sm">
-              {/* Income Breakdown */}
-              <div className="col-span-6 space-y-2">
-                <h3 className="font-medium text-[#E5E7EB]">Income Breakdown</h3>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-[#9CA3AF]">Ticket Sales</span>
-                    <span className="text-[#10B981]">${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}</span>
-                  </div>
-                  {incomes.map(income => (
-                    income.name !== 'Ticket Sales' && (
-                      <div key={income.name} className="flex justify-between">
-                        <span className="text-[#9CA3AF]">{income.name}</span>
-                        <span className="text-[#10B981]">${income.value.toLocaleString()}</span>
+            {/* Budget Summary and Report Grid */}
+            <div className="grid grid-cols-12 gap-3 sm:gap-4">
+              {/* Detailed Budget Report */}
+              <div className="col-span-8 space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+                  {/* Income Breakdown */}
+                  <div className="space-y-1 sm:space-y-2">
+                    <h3 className="font-medium text-[#E5E7EB] text-xs sm:text-sm">Income Breakdown</h3>
+                    <div className="space-y-0.5 sm:space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-[#9CA3AF] text-xs sm:text-sm">Ticket Sales</span>
+                        <span className="text-[#4aba91] text-xs sm:text-sm">${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}</span>
                       </div>
-                    )
-                  ))}
+                      {incomes.map(income => (
+                        income.name !== 'Ticket Sales' && (
+                          <div key={income.name} className="flex justify-between">
+                            <span className="text-[#9CA3AF] text-xs sm:text-sm">{income.name}</span>
+                            <span className="text-[#4aba91] text-xs sm:text-sm">${income.value.toLocaleString()}</span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Expense Breakdown */}
+                  <div className="space-y-1 sm:space-y-2">
+                    <h3 className="font-medium text-[#E5E7EB] text-xs sm:text-sm">Expense Breakdown</h3>
+                    <div className="space-y-0.5 sm:space-y-1">
+                      {expenses.map((expense, index) => (
+                        <div key={expense.name} className="flex justify-between">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF] cursor-help">
+                                  {expense.name}
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[200px]">
+                                <p className="text-2xs sm:text-xs">{getExpenseTooltip(expense.name)}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <span className="text-[#dc6868] text-xs sm:text-sm">${expense.value.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Expense Breakdown */}
-              <div className="col-span-6 space-y-2">
-                <h3 className="font-medium text-[#E5E7EB]">Expense Breakdown</h3>
-                <div className="space-y-1">
-                  {expenses.map(expense => (
-                    <div key={expense.name} className="flex justify-between">
-                      <span className="text-[#9CA3AF]">{expense.name}</span>
-                      <span className="text-[#EF4444]">${expense.value.toLocaleString()}</span>
-                    </div>
-                  ))}
+              {/* Budget Summary Cards */}
+              <div className="col-span-4 grid grid-rows-3 gap-2">
+                {/* Total Income */}
+                <div className="bg-[#1A1D24] rounded-lg p-2 sm:p-3 border border-[#2D3139]">
+                  <div className="flex flex-col">
+                    <span className="text-xs sm:text-sm text-[#9CA3AF]">Total Income</span>
+                    <span className="text-base sm:text-2xl font-medium text-[#4aba91]">
+                      ${totalIncome.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Total Expenses */}
+                <div className="bg-[#1A1D24] rounded-lg p-2 sm:p-3 border border-[#2D3139]">
+                  <div className="flex flex-col">
+                    <span className="text-xs sm:text-sm text-[#9CA3AF]">Total Expenses</span>
+                    <span className="text-base sm:text-2xl font-medium text-[#dc6868]">
+                      ${totalExpenses.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Net Profit */}
+                <div className="bg-[#1A1D24] rounded-lg p-2 sm:p-3 border border-[#2D3139]">
+                  <div className="flex flex-col">
+                    <span className="text-xs sm:text-sm text-[#9CA3AF]">Net Profit</span>
+                    <span className={`text-lg sm:text-3xl font-semibold ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
+                      ${profit.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -298,24 +548,24 @@ const EventCalculator: React.FC = () => {
         </div>
 
         {/* Main Content Grid */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
+        <div className="flex-1 grid grid-cols-2 gap-3 sm:gap-4 min-h-0">
           {/* Income Section */}
           <div className="bg-[#1D2027] rounded-lg border border-[#2D3139] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-[#2D3139]">
-              <span className="text-sm font-semibold text-[#E5E7EB]">Income</span>
+            <div className="flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-[#2D3139]">
+              <span className="text-xs sm:text-sm font-semibold text-[#E5E7EB]">Income</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4">
+              <div className="space-y-2 sm:space-y-3 lg:space-y-4">
                 {/* Ticket Calculator */}
-                <div className="space-y-4 border-b border-[#2D3139] pb-4">
+                <div className="space-y-2 sm:space-y-3 lg:space-y-4 border-b border-[#2D3139] pb-2 sm:pb-3 lg:pb-4">
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm text-[#9CA3AF]">Number of Tickets</label>
+                      <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">Number of Tickets</label>
                       <Input
                         type="number"
                         value={ticketDetails.quantity}
                         onChange={(e) => setTicketDetails(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
-                        className="h-8 w-20 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                        className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
                         min={0}
                         max={1000}
                         step={1}
@@ -332,20 +582,21 @@ const EventCalculator: React.FC = () => {
                         step={1}
                         onValueChange={(value) => setTicketDetails(prev => ({ ...prev, quantity: value[0] }))}
                         className="income-slider h-1.5"
+                        variant="income"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm text-[#9CA3AF]">Ticket Price</label>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-[#10B981]">$</span>
+                      <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">Ticket Price</label>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-3xs sm:text-2xs lg:text-xs text-[#10B981]">$</span>
                         <Input
                           type="number"
                           value={ticketDetails.price}
                           onChange={(e) => setTicketDetails(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                          className="h-8 w-20 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                          className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
                           min={0}
                           max={200}
                           step={1}
@@ -363,13 +614,14 @@ const EventCalculator: React.FC = () => {
                         step={1}
                         onValueChange={(value) => setTicketDetails(prev => ({ ...prev, price: value[0] }))}
                         className="income-slider h-1.5"
+                        variant="income"
                       />
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-[#9CA3AF]">Total Ticket Sales</span>
-                    <span className="text-sm font-medium text-[#10B981]">
+                    <span className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">Total Ticket Sales</span>
+                    <span className="text-2xs sm:text-xs lg:text-sm font-medium text-[#10B981]">
                       ${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}
                     </span>
                   </div>
@@ -380,14 +632,14 @@ const EventCalculator: React.FC = () => {
                   income.name !== 'Ticket Sales' && (
                     <div key={income.name} className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <label className="text-sm text-[#9CA3AF]">{income.name}</label>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs text-[#10B981]">$</span>
+                        <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">{income.name}</label>
+                        <div className="flex items-center space-x-1">
+                          <span className="text-3xs sm:text-2xs lg:text-xs text-[#10B981]">$</span>
                           <Input
                             type="number"
                             value={income.value}
                             onChange={(e) => handleIncomeChange(index, parseFloat(e.target.value) || 0)}
-                            className="h-8 w-20 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                            className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
                             min={income.min}
                             max={income.max}
                             step={income.step}
@@ -405,6 +657,7 @@ const EventCalculator: React.FC = () => {
                           step={income.step}
                           onValueChange={(value) => handleIncomeChange(index, value[0])}
                           className="income-slider h-1.5"
+                          variant="income"
                         />
                       </div>
                     </div>
@@ -416,38 +669,50 @@ const EventCalculator: React.FC = () => {
 
           {/* Expenses Section */}
           <div className="bg-[#1D2027] rounded-lg border border-[#2D3139] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-[#2D3139]">
-              <span className="text-sm font-semibold text-[#E5E7EB]">Expenses</span>
+            <div className="flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-[#2D3139]">
+              <span className="text-xs sm:text-sm font-semibold text-[#E5E7EB]">Expenses</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-[#9CA3AF]">Auto-Budget</span>
+                    <div className="flex items-center space-x-1 sm:space-x-2">
+                      <span className="text-3xs sm:text-2xs lg:text-xs text-[#9CA3AF]">Auto-Budget</span>
                       <Switch
                         checked={isAutoBudget}
                         onCheckedChange={setIsAutoBudget}
+                        className="scale-75 sm:scale-90 lg:scale-100"
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Automatically allocate expenses based on total income</p>
+                  <TooltipContent side="left" className="max-w-[300px] whitespace-pre-line">
+                    <p className="text-2xs sm:text-xs">{getAutoBudgetTooltip()}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4">
+              <div className="space-y-2 sm:space-y-3 lg:space-y-4">
                 {expenses.map((expense, index) => (
                   <div key={expense.name} className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm text-[#9CA3AF]">{expense.name}</label>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-[#EF4444]">$</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF] cursor-help">
+                              {expense.name}
+                            </label>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[200px]">
+                            <p className="text-2xs sm:text-xs">{getExpenseTooltip(expense.name)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-3xs sm:text-2xs lg:text-xs text-[#dc6868]">$</span>
                         <Input
                           type="number"
                           value={expense.value}
                           onChange={(e) => handleExpenseChange(index, parseFloat(e.target.value) || 0)}
-                          className="h-8 w-20 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#EF4444]"
+                          className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#dc6868]"
                           min={expense.min}
                           max={expense.max}
                           step={expense.step}
@@ -465,6 +730,7 @@ const EventCalculator: React.FC = () => {
                         step={expense.step}
                         onValueChange={(value) => handleExpenseChange(index, value[0])}
                         className="expense-slider h-1.5"
+                        variant="expense"
                       />
                     </div>
                   </div>
