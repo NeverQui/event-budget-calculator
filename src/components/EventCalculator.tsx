@@ -509,12 +509,24 @@ const EventCalculator: React.FC = () => {
               </div>
 
               {/* Budget Summary Cards */}
-              <div className="lg:col-span-4 grid grid-cols-3 lg:grid-cols-1 gap-2">
+              <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+                {/* Net Profit - Moved to top for emphasis */}
+                <div className={`order-first col-span-1 sm:col-span-3 lg:col-span-1 bg-gradient-to-br ${profit >= 0 ? 'from-[#1A2428] to-[#1A2C25]' : 'from-[#2C1A1A] to-[#1A1D24]'} rounded-xl p-4 border border-[#2D3139] shadow-xl relative overflow-hidden`}>
+                  <div className="flex flex-col relative z-10">
+                    <span className="text-[#9CA3AF] text-sm mb-1">Net Profit</span>
+                    <span className={`text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
+                      ${profit.toLocaleString()}
+                    </span>
+                  </div>
+                  {/* Decorative elements */}
+                  <div className={`absolute top-0 right-0 w-32 h-32 opacity-10 transform translate-x-16 -translate-y-8 rounded-full blur-2xl ${profit >= 0 ? 'bg-[#4aba91]' : 'bg-[#dc6868]'}`} />
+                </div>
+
                 {/* Total Income */}
                 <div className="bg-[#1A1D24] rounded-lg p-3 border border-[#2D3139]">
                   <div className="flex flex-col">
-                    <span className="text-[#9CA3AF] text-sm">Total Income</span>
-                    <span className="text-[#4aba91] text-lg sm:text-xl font-medium">
+                    <span className="text-[#9CA3AF] text-xs sm:text-sm">Total Income</span>
+                    <span className="text-[#4aba91] text-base sm:text-lg lg:text-xl font-medium">
                       ${totalIncome.toLocaleString()}
                     </span>
                   </div>
@@ -523,19 +535,9 @@ const EventCalculator: React.FC = () => {
                 {/* Total Expenses */}
                 <div className="bg-[#1A1D24] rounded-lg p-3 border border-[#2D3139]">
                   <div className="flex flex-col">
-                    <span className="text-[#9CA3AF] text-sm">Total Expenses</span>
-                    <span className="text-[#dc6868] text-lg sm:text-xl font-medium">
+                    <span className="text-[#9CA3AF] text-xs sm:text-sm">Total Expenses</span>
+                    <span className="text-[#dc6868] text-base sm:text-lg lg:text-xl font-medium">
                       ${totalExpenses.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Net Profit */}
-                <div className="bg-[#1A1D24] rounded-lg p-3 border border-[#2D3139]">
-                  <div className="flex flex-col">
-                    <span className="text-[#9CA3AF] text-sm">Net Profit</span>
-                    <span className={`text-xl sm:text-2xl font-semibold ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
-                      ${profit.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -561,8 +563,11 @@ const EventCalculator: React.FC = () => {
                       <Input
                         type="number"
                         value={ticketDetails.quantity}
-                        onChange={(e) => setTicketDetails(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
-                        className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          setTicketDetails(prev => ({ ...prev, quantity: Math.min(Math.max(value, 0), 1000) }));
+                        }}
+                        className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#4aba91]"
                         min={0}
                         max={1000}
                         step={1}
@@ -577,8 +582,8 @@ const EventCalculator: React.FC = () => {
                         min={0}
                         max={1000}
                         step={1}
-                        onValueChange={(value) => setTicketDetails(prev => ({ ...prev, quantity: value[0] }))}
-                        className="income-slider h-1.5"
+                        onValueChange={([value]) => setTicketDetails(prev => ({ ...prev, quantity: value }))}
+                        className="h-1.5"
                         variant="income"
                       />
                     </div>
@@ -588,12 +593,15 @@ const EventCalculator: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <label className="text-sm text-[#9CA3AF]">Ticket Price</label>
                       <div className="flex items-center space-x-1">
-                        <span className="text-xs text-[#10B981]">$</span>
+                        <span className="text-xs text-[#4aba91]">$</span>
                         <Input
                           type="number"
                           value={ticketDetails.price}
-                          onChange={(e) => setTicketDetails(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                          className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            setTicketDetails(prev => ({ ...prev, price: Math.min(Math.max(value, 0), 200) }));
+                          }}
+                          className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#4aba91]"
                           min={0}
                           max={200}
                           step={1}
@@ -609,8 +617,8 @@ const EventCalculator: React.FC = () => {
                         min={0}
                         max={200}
                         step={1}
-                        onValueChange={(value) => setTicketDetails(prev => ({ ...prev, price: value[0] }))}
-                        className="income-slider h-1.5"
+                        onValueChange={([value]) => setTicketDetails(prev => ({ ...prev, price: value }))}
+                        className="h-1.5"
                         variant="income"
                       />
                     </div>
@@ -618,7 +626,7 @@ const EventCalculator: React.FC = () => {
 
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-[#9CA3AF]">Total Ticket Sales</span>
-                    <span className="text-sm font-medium text-[#10B981]">
+                    <span className="text-sm font-medium text-[#4aba91]">
                       ${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}
                     </span>
                   </div>
