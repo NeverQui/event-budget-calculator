@@ -53,7 +53,8 @@ const EXPENSE_COLORS = {
 };
 
 // Add these constants at the top level
-const BASE_TICKET_PRICE = 50; // Reference price point for core expense calculations
+const BASE_TICKET_PRICE = 50;
+
 const CORE_EXPENSE_RULES = {
   'Venue Rental': {
     baseRate: 15, // Reduced from 50
@@ -211,6 +212,24 @@ const FIXED_COSTS: Record<ExpenseCategory, CostConfig> = {
   }
 };
 
+// Base costs for expenses
+const BASE_COSTS = {
+  'Venue Rental': 2000,
+  'Catering': 1500,
+  'Equipment': 1000,
+  'Staffing': 1200,
+  'Marketing': 1000,
+  'Miscellaneous': 500
+};
+
+// Scale factors for expenses that grow with ticket quantity
+const SCALE_FACTORS = {
+  'Venue Rental': 0.4,  // Grows moderately with attendance
+  'Catering': 0.5,     // Grows fastest with attendance
+  'Marketing': 0.25,   // Grows slower with attendance
+  'Miscellaneous': 0.2 // Grows slowest with attendance
+};
+
 const EventCalculator: React.FC = () => {
   const [isAutoBudget, setIsAutoBudget] = useState(false);
   const [manualExpenses, setManualExpenses] = useState<BudgetItem[]>([]);
@@ -250,31 +269,12 @@ const EventCalculator: React.FC = () => {
     setLastClickTime(currentTime);
   };
 
-  // Update the useEffect for auto-budget calculations
+  // Update the auto-budget effect
   useEffect(() => {
-    if (isAutoBudget && !manualExpenses.length) { // Only auto-calculate if no manual adjustments
-      // Base costs for each expense category
-      const BASE_COSTS = {
-        'Venue Rental': 2000,
-        'Catering': 1500,
-        'Equipment': 1000,
-        'Staffing': 1200,
-        'Marketing': 1000,
-        'Miscellaneous': 500
-      };
-      
-      // Scale factors for each category (how much they grow with tickets)
-      const SCALE_FACTORS = {
-        'Venue Rental': 0.4,  // Grows moderately with attendance
-        'Catering': 0.5,     // Grows fastest with attendance
-        'Marketing': 0.25,   // Grows slower with attendance
-        'Miscellaneous': 0.2 // Grows slowest with attendance
-      };
-
+    if (isAutoBudget && !manualExpenses.length) {
       const newExpenses = expenses.map(expense => {
         const baseCost = BASE_COSTS[expense.name as keyof typeof BASE_COSTS];
         
-        // Only apply ticket scaling to specific expenses
         if (['Venue Rental', 'Catering', 'Marketing', 'Miscellaneous'].includes(expense.name)) {
           const scaleFactor = SCALE_FACTORS[expense.name as keyof typeof SCALE_FACTORS];
           let value = Math.round(
@@ -303,21 +303,18 @@ const EventCalculator: React.FC = () => {
       
       setExpenses(newExpenses);
     }
-  }, [
-    isAutoBudget,
-    ticketDetails.quantity,
-    ticketDetails.price,
-    manualExpenses.length // Add dependency to track manual changes
-  ]);
+  }, [isAutoBudget, ticketDetails.quantity, ticketDetails.price, manualExpenses.length, expenses]);
 
-  // Update ticket sales and auto-budget calculations
+  // Update ticket sales effect
   useEffect(() => {
     const totalTicketSales = ticketDetails.quantity * ticketDetails.price;
     const newIncomes = [...incomes];
     const ticketSalesIndex = newIncomes.findIndex(income => income.name === 'Ticket Sales');
-    newIncomes[ticketSalesIndex].value = totalTicketSales;
-    setIncomes(newIncomes);
-  }, [ticketDetails]); // Only depends on ticketDetails now
+    if (ticketSalesIndex !== -1) {
+      newIncomes[ticketSalesIndex].value = totalTicketSales;
+      setIncomes(newIncomes);
+    }
+  }, [ticketDetails, incomes]);
 
   const roundToNearestStep = (value: number, step: number) => {
     // Special handling for step size of 5
@@ -431,14 +428,14 @@ const EventCalculator: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#0B0D13]">
       <style>{inputStyles}</style>
-      <div className="h-full max-w-7xl mx-auto flex flex-col space-y-3 p-3 sm:space-y-4 sm:p-4">
+      <div className="h-full max-w-7xl mx-auto flex flex-col space-y-4 p-3 sm:p-4 md:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-base sm:text-lg font-semibold text-[#E5E7EB]">Event Budget Calculator</h1>
+          <h1 className="text-lg sm:text-xl font-semibold text-[#E5E7EB]">Event Budget Calculator</h1>
           <Button
             variant="outline"
             onClick={resetAll}
-            className="h-7 sm:h-8 px-2 sm:px-3 text-xs bg-transparent border-[#2D3139] text-[#E5E7EB] hover:bg-[#1D2027]"
+            className="h-8 px-3 text-xs bg-transparent border-[#2D3139] text-[#E5E7EB] hover:bg-[#1D2027]"
           >
             Reset All
           </Button>
@@ -446,9 +443,9 @@ const EventCalculator: React.FC = () => {
 
         {/* Budget Report */}
         <div className="bg-[#1D2027] rounded-lg border border-[#2D3139]">
-          <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
+          <div className="p-4 space-y-4">
             {/* Two-tone Bar Graph */}
-            <div className="h-2 sm:h-3 flex rounded-sm overflow-hidden bg-[#2D3139] transition-all duration-200">
+            <div className="h-2 flex rounded-sm overflow-hidden bg-[#2D3139] transition-all duration-200">
               <div 
                 className="bg-[#dc6868] transition-all duration-200" 
                 style={{ width: `${expensePercentage}%` }} 
@@ -462,23 +459,23 @@ const EventCalculator: React.FC = () => {
             </div>
 
             {/* Budget Summary and Report Grid */}
-            <div className="grid grid-cols-12 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               {/* Detailed Budget Report */}
-              <div className="col-span-8 space-y-3 sm:space-y-4">
-                <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+              <div className="lg:col-span-8 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Income Breakdown */}
-                  <div className="space-y-1 sm:space-y-2">
-                    <h3 className="font-medium text-[#E5E7EB] text-xs sm:text-sm">Income Breakdown</h3>
-                    <div className="space-y-0.5 sm:space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-[#9CA3AF] text-xs sm:text-sm">Ticket Sales</span>
-                        <span className="text-[#4aba91] text-xs sm:text-sm">${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}</span>
+                  <div className="space-y-2">
+                    <h3 className="font-medium text-[#E5E7EB] text-sm">Income Breakdown</h3>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[#9CA3AF] text-sm">Ticket Sales</span>
+                        <span className="text-[#4aba91] text-sm font-medium">${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}</span>
                       </div>
                       {incomes.map(income => (
                         income.name !== 'Ticket Sales' && (
-                          <div key={income.name} className="flex justify-between">
-                            <span className="text-[#9CA3AF] text-xs sm:text-sm">{income.name}</span>
-                            <span className="text-[#4aba91] text-xs sm:text-sm">${income.value.toLocaleString()}</span>
+                          <div key={income.name} className="flex justify-between items-center">
+                            <span className="text-[#9CA3AF] text-sm">{income.name}</span>
+                            <span className="text-[#4aba91] text-sm font-medium">${income.value.toLocaleString()}</span>
                           </div>
                         )
                       ))}
@@ -486,24 +483,24 @@ const EventCalculator: React.FC = () => {
                   </div>
 
                   {/* Expense Breakdown */}
-                  <div className="space-y-1 sm:space-y-2">
-                    <h3 className="font-medium text-[#E5E7EB] text-xs sm:text-sm">Expense Breakdown</h3>
-                    <div className="space-y-0.5 sm:space-y-1">
+                  <div className="space-y-2">
+                    <h3 className="font-medium text-[#E5E7EB] text-sm">Expense Breakdown</h3>
+                    <div className="space-y-1.5">
                       {expenses.map((expense, index) => (
-                        <div key={expense.name} className="flex justify-between">
+                        <div key={expense.name} className="flex justify-between items-center">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF] cursor-help">
+                                <label className="text-sm text-[#9CA3AF] cursor-help">
                                   {expense.name}
                                 </label>
                               </TooltipTrigger>
                               <TooltipContent side="right" className="max-w-[200px]">
-                                <p className="text-2xs sm:text-xs">{getExpenseTooltip(expense.name)}</p>
+                                <p className="text-xs">{getExpenseTooltip(expense.name)}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          <span className="text-[#dc6868] text-xs sm:text-sm">${expense.value.toLocaleString()}</span>
+                          <span className="text-[#dc6868] text-sm font-medium">${expense.value.toLocaleString()}</span>
                         </div>
                       ))}
                     </div>
@@ -512,32 +509,32 @@ const EventCalculator: React.FC = () => {
               </div>
 
               {/* Budget Summary Cards */}
-              <div className="col-span-4 grid grid-rows-3 gap-2">
+              <div className="lg:col-span-4 grid grid-cols-3 lg:grid-cols-1 gap-2">
                 {/* Total Income */}
-                <div className="bg-[#1A1D24] rounded-lg p-2 sm:p-3 border border-[#2D3139]">
+                <div className="bg-[#1A1D24] rounded-lg p-3 border border-[#2D3139]">
                   <div className="flex flex-col">
-                    <span className="text-xs sm:text-sm text-[#9CA3AF]">Total Income</span>
-                    <span className="text-base sm:text-2xl font-medium text-[#4aba91]">
+                    <span className="text-[#9CA3AF] text-sm">Total Income</span>
+                    <span className="text-[#4aba91] text-lg sm:text-xl font-medium">
                       ${totalIncome.toLocaleString()}
                     </span>
                   </div>
                 </div>
 
                 {/* Total Expenses */}
-                <div className="bg-[#1A1D24] rounded-lg p-2 sm:p-3 border border-[#2D3139]">
+                <div className="bg-[#1A1D24] rounded-lg p-3 border border-[#2D3139]">
                   <div className="flex flex-col">
-                    <span className="text-xs sm:text-sm text-[#9CA3AF]">Total Expenses</span>
-                    <span className="text-base sm:text-2xl font-medium text-[#dc6868]">
+                    <span className="text-[#9CA3AF] text-sm">Total Expenses</span>
+                    <span className="text-[#dc6868] text-lg sm:text-xl font-medium">
                       ${totalExpenses.toLocaleString()}
                     </span>
                   </div>
                 </div>
 
                 {/* Net Profit */}
-                <div className="bg-[#1A1D24] rounded-lg p-2 sm:p-3 border border-[#2D3139]">
+                <div className="bg-[#1A1D24] rounded-lg p-3 border border-[#2D3139]">
                   <div className="flex flex-col">
-                    <span className="text-xs sm:text-sm text-[#9CA3AF]">Net Profit</span>
-                    <span className={`text-lg sm:text-3xl font-semibold ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
+                    <span className="text-[#9CA3AF] text-sm">Net Profit</span>
+                    <span className={`text-xl sm:text-2xl font-semibold ${profit >= 0 ? 'text-[#4aba91]' : 'text-[#dc6868]'}`}>
                       ${profit.toLocaleString()}
                     </span>
                   </div>
@@ -548,24 +545,24 @@ const EventCalculator: React.FC = () => {
         </div>
 
         {/* Main Content Grid */}
-        <div className="flex-1 grid grid-cols-2 gap-3 sm:gap-4 min-h-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0">
           {/* Income Section */}
           <div className="bg-[#1D2027] rounded-lg border border-[#2D3139] flex flex-col">
-            <div className="flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-[#2D3139]">
-              <span className="text-xs sm:text-sm font-semibold text-[#E5E7EB]">Income</span>
+            <div className="flex items-center justify-between p-4 border-b border-[#2D3139]">
+              <span className="text-sm font-semibold text-[#E5E7EB]">Income</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4">
-              <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
                 {/* Ticket Calculator */}
-                <div className="space-y-2 sm:space-y-3 lg:space-y-4 border-b border-[#2D3139] pb-2 sm:pb-3 lg:pb-4">
-                  <div className="space-y-2">
+                <div className="space-y-4 border-b border-[#2D3139] pb-4">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">Number of Tickets</label>
+                      <label className="text-sm text-[#9CA3AF]">Number of Tickets</label>
                       <Input
                         type="number"
                         value={ticketDetails.quantity}
                         onChange={(e) => setTicketDetails(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
-                        className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                        className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
                         min={0}
                         max={1000}
                         step={1}
@@ -587,16 +584,16 @@ const EventCalculator: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">Ticket Price</label>
+                      <label className="text-sm text-[#9CA3AF]">Ticket Price</label>
                       <div className="flex items-center space-x-1">
-                        <span className="text-3xs sm:text-2xs lg:text-xs text-[#10B981]">$</span>
+                        <span className="text-xs text-[#10B981]">$</span>
                         <Input
                           type="number"
                           value={ticketDetails.price}
                           onChange={(e) => setTicketDetails(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                          className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                          className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
                           min={0}
                           max={200}
                           step={1}
@@ -620,8 +617,8 @@ const EventCalculator: React.FC = () => {
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">Total Ticket Sales</span>
-                    <span className="text-2xs sm:text-xs lg:text-sm font-medium text-[#10B981]">
+                    <span className="text-sm text-[#9CA3AF]">Total Ticket Sales</span>
+                    <span className="text-sm font-medium text-[#10B981]">
                       ${(ticketDetails.quantity * ticketDetails.price).toLocaleString()}
                     </span>
                   </div>
@@ -630,16 +627,16 @@ const EventCalculator: React.FC = () => {
                 {/* Other Income Sources */}
                 {incomes.map((income, index) => (
                   income.name !== 'Ticket Sales' && (
-                    <div key={income.name} className="space-y-2">
+                    <div key={income.name} className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF]">{income.name}</label>
+                        <label className="text-sm text-[#9CA3AF]">{income.name}</label>
                         <div className="flex items-center space-x-1">
-                          <span className="text-3xs sm:text-2xs lg:text-xs text-[#10B981]">$</span>
+                          <span className="text-xs text-[#10B981]">$</span>
                           <Input
                             type="number"
                             value={income.value}
                             onChange={(e) => handleIncomeChange(index, parseFloat(e.target.value) || 0)}
-                            className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
+                            className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#10B981]"
                             min={income.min}
                             max={income.max}
                             step={income.step}
@@ -669,50 +666,50 @@ const EventCalculator: React.FC = () => {
 
           {/* Expenses Section */}
           <div className="bg-[#1D2027] rounded-lg border border-[#2D3139] flex flex-col">
-            <div className="flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-[#2D3139]">
-              <span className="text-xs sm:text-sm font-semibold text-[#E5E7EB]">Expenses</span>
+            <div className="flex items-center justify-between p-4 border-b border-[#2D3139]">
+              <span className="text-sm font-semibold text-[#E5E7EB]">Expenses</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center space-x-1 sm:space-x-2">
-                      <span className="text-3xs sm:text-2xs lg:text-xs text-[#9CA3AF]">Auto-Budget</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-[#9CA3AF]">Auto-Budget</span>
                       <Switch
                         checked={isAutoBudget}
                         onCheckedChange={setIsAutoBudget}
-                        className="scale-75 sm:scale-90 lg:scale-100"
+                        className="scale-90"
                       />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="left" className="max-w-[300px] whitespace-pre-line">
-                    <p className="text-2xs sm:text-xs">{getAutoBudgetTooltip()}</p>
+                    <p className="text-xs">{getAutoBudgetTooltip()}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4">
-              <div className="space-y-2 sm:space-y-3 lg:space-y-4">
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
                 {expenses.map((expense, index) => (
-                  <div key={expense.name} className="space-y-2">
+                  <div key={expense.name} className="space-y-3">
                     <div className="flex justify-between items-center">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <label className="text-2xs sm:text-xs lg:text-sm text-[#9CA3AF] cursor-help">
+                            <label className="text-sm text-[#9CA3AF] cursor-help">
                               {expense.name}
                             </label>
                           </TooltipTrigger>
                           <TooltipContent side="right" className="max-w-[200px]">
-                            <p className="text-2xs sm:text-xs">{getExpenseTooltip(expense.name)}</p>
+                            <p className="text-xs">{getExpenseTooltip(expense.name)}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                       <div className="flex items-center space-x-1">
-                        <span className="text-3xs sm:text-2xs lg:text-xs text-[#dc6868]">$</span>
+                        <span className="text-xs text-[#dc6868]">$</span>
                         <Input
                           type="number"
                           value={expense.value}
                           onChange={(e) => handleExpenseChange(index, parseFloat(e.target.value) || 0)}
-                          className="h-6 sm:h-7 lg:h-8 w-14 sm:w-16 lg:w-20 text-right text-2xs sm:text-xs lg:text-sm bg-[#2D3139] border-[#3D4149] text-[#dc6868]"
+                          className="h-8 w-24 text-right text-sm bg-[#2D3139] border-[#3D4149] text-[#dc6868]"
                           min={expense.min}
                           max={expense.max}
                           step={expense.step}
