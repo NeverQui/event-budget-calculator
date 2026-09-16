@@ -29,13 +29,6 @@ enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
-enum WorkspaceSplit: Equatable {
-    case editor
-    case balanced
-    case semiExpanded
-    case visual
-}
-
 private enum EditorScrollAnchor: Hashable {
     case top
 }
@@ -96,6 +89,12 @@ struct ForecastView: View {
         }
         .tint(ForecastTheme.warning)
         .preferredColorScheme(appearance.colorScheme)
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
+        }
         .sheet(item: $presentedSheet) { destination in
             switch destination {
             case .report:
@@ -413,9 +412,7 @@ struct ForecastView: View {
 
     private func workspaceSplitChangedByUser(_ split: WorkspaceSplit) {
         switch split {
-        case .editor:
-            pinnedWorkspaceSplit = nil
-        case .balanced, .semiExpanded:
+        case .editor, .balanced, .semiExpanded:
             pinnedWorkspaceSplit = split
         case .visual:
             break
@@ -477,40 +474,26 @@ private struct PlanWorkspace: View {
     let openEditor: (EditorTab) -> Void
     let userChangedSplit: (WorkspaceSplit) -> Void
 
-    @GestureState private var dragTranslation: CGFloat = 0
+    // The height survives gesture completion, so settling starts at the last
+    // displayed position instead of resetting a translation to zero.
+    @State private var summaryHeight: CGFloat?
+    @State private var dragOrigin: CGFloat?
+    @GestureState private var isDragging = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
-            let compact = geometry.size.height < 660
-            let handleHeight: CGFloat = 34
-            let editorHeight = min(compact ? 164 : 176, geometry.size.height * 0.27)
-            let balancedHeight = min(compact ? 304 : 326, geometry.size.height * 0.54)
-            let visualHeight = max(geometry.size.height - handleHeight, balancedHeight)
-            let semiExpandedHeight = max(
-                balancedHeight,
-                min(
-                    geometry.size.height * 0.75,
-                    visualHeight - (compact ? 124 : 140)
-                )
-            )
-            let restingHeight = summaryHeight(
-                editor: editorHeight,
-                balanced: balancedHeight,
-                semiExpanded: semiExpandedHeight,
-                visual: visualHeight
-            )
-            let interactiveHeight = min(
-                max(restingHeight + dragTranslation, editorHeight),
-                visualHeight
-            )
+            let layout = WorkspaceLayout(height: geometry.size.height)
+            let compact = layout.compact
+            let interactiveHeight = layout.clamped(summaryHeight ?? layout.summaryHeight(for: split))
+            let editorHeight = max(layout.height - interactiveHeight - WorkspaceLayout.handleHeight, 0)
 
             VStack(spacing: 0) {
                 ResultSummaryView(
                     model: model,
                     compact: compact,
-                    expanded: split == .semiExpanded || split == .visual,
-                    minimized: split == .editor,
+                    expanded: interactiveHeight > layout.balanced + 40,
+                    overviewProgress: layout.overviewProgress(at: interactiveHeight),
                     availableHeight: interactiveHeight,
                     visualization: $selectedVisualization,
                     selectEditor: openEditor
@@ -519,26 +502,14 @@ private struct PlanWorkspace: View {
                 .frame(height: interactiveHeight, alignment: .top)
                 .clipped()
 
-                visualizationHandle
-                    .gesture(
-                        expansionGesture(
-                            restingHeight: restingHeight,
-                            editorHeight: editorHeight,
-                            balancedHeight: balancedHeight,
-                            semiExpandedHeight: semiExpandedHeight,
-                            visualHeight: visualHeight
-                        )
-                    )
+                visualizationHandle(layout: layout)
+                    .gesture(expansionGesture(layout: layout))
                     .onTapGesture {
-                        switch split {
-                        case .editor: setSplit(.balanced, userInitiated: true)
-                        case .balanced: setSplit(.semiExpanded, userInitiated: true)
-                        case .semiExpanded: setSplit(.visual, userInitiated: true)
-                        case .visual: setSplit(.semiExpanded, userInitiated: true)
-                        }
+                        let next = split == .visual ? .semiExpanded : split.adjacent(increasing: true)
+                        setSplit(next, layout: layout, userInitiated: true)
                     }
 
-                if split != .visual {
+                VStack(spacing: 0) {
                     EditorTabBar(selection: editorBinding)
                         .padding(.horizontal, 14)
                         .padding(.top, 5)
@@ -572,8 +543,28 @@ private struct PlanWorkspace: View {
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
+                .frame(height: editorHeight, alignment: .top)
+                .clipped()
+                .allowsHitTesting(editorHeight > 44)
+                .accessibilityHidden(editorHeight <= 44)
             }
+            .coordinateSpace(name: "budgetWorkspace")
             .background(ForecastTheme.canvas)
+            .onChange(of: split) { _, newSplit in
+                guard dragOrigin == nil else { return }
+                settle(at: newSplit, layout: layout)
+            }
+            .onChange(of: layout) { _, newLayout in
+                dragOrigin = nil
+                summaryHeight = newLayout.summaryHeight(for: split)
+            }
+            .onChange(of: isDragging) { _, dragging in
+                // GestureState resets on cancellation as well as normal release.
+                if !dragging, dragOrigin != nil {
+                    dragOrigin = nil
+                    settle(at: split, layout: layout)
+                }
+            }
             .animation(reduceMotion ? nil : ForecastMotion.navigation, value: selectedEditor)
         }
     }
@@ -585,60 +576,65 @@ private struct PlanWorkspace: View {
         )
     }
 
-    private var visualizationHandle: some View {
-        FluidWorkspaceDivider(
-            tint: selectedEditor.tint,
-            dragTranslation: dragTranslation,
-            split: split
-        )
-        .frame(height: 34)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(split == .visual ? "Show budget inputs" : "Resize budget workspace")
-        .accessibilityHint("Drag down for full visualizations or up for more input space")
-        .accessibilityAddTraits(.isButton)
+    private func visualizationHandle(layout: WorkspaceLayout) -> some View {
+        WorkspaceDivider(tint: selectedEditor.tint, isDragging: isDragging)
+            .frame(height: WorkspaceLayout.handleHeight)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("workspace-divider")
+            .accessibilityLabel("Resize budget workspace")
+            .accessibilityValue(split.title)
+            .accessibilityHint("Swipe up for larger charts or down for more input space. Double-tap to resize.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    setSplit(split.adjacent(increasing: true), layout: layout, userInitiated: true)
+                case .decrement:
+                    setSplit(split.adjacent(increasing: false), layout: layout, userInitiated: true)
+                @unknown default: break
+                }
+            }
+            .accessibilityAction(named: "More input space") {
+                setSplit(.editor, layout: layout, userInitiated: true)
+            }
+            .accessibilityAction(named: "Full charts") {
+                setSplit(.visual, layout: layout, userInitiated: true)
+            }
+            .sensoryFeedback(.selection, trigger: split)
     }
 
-    private func expansionGesture(
-        restingHeight: CGFloat,
-        editorHeight: CGFloat,
-        balancedHeight: CGFloat,
-        semiExpandedHeight: CGFloat,
-        visualHeight: CGFloat
-    ) -> some Gesture {
-        DragGesture(minimumDistance: 6)
-            .updating($dragTranslation) { value, state, _ in
-                state = value.translation.height
+    private func expansionGesture(layout: WorkspaceLayout) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .named("budgetWorkspace"))
+            .updating($isDragging) { _, state, transaction in
+                state = true
+                transaction.animation = nil
+            }
+            .onChanged { value in
+                if dragOrigin == nil {
+                    dragOrigin = summaryHeight ?? layout.summaryHeight(for: split)
+                }
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                transaction.isContinuous = true
+                withTransaction(transaction) {
+                    summaryHeight = layout.clamped((dragOrigin ?? 0) + value.translation.height)
+                }
             }
             .onEnded { value in
-                let projectedHeight = min(
-                    max(restingHeight + value.predictedEndTranslation.height, editorHeight),
-                    visualHeight
+                let height = layout.clamped((dragOrigin ?? layout.summaryHeight(for: split)) + value.translation.height)
+                let destination = layout.destination(
+                    at: height,
+                    projectedTravel: value.predictedEndTranslation.height - value.translation.height
                 )
-                let destinations: [(WorkspaceSplit, CGFloat)] = [
-                    (.editor, editorHeight),
-                    (.balanced, balancedHeight),
-                    (.semiExpanded, semiExpandedHeight),
-                    (.visual, visualHeight)
-                ]
-                let destination = destinations.min {
-                    abs($0.1 - projectedHeight) < abs($1.1 - projectedHeight)
-                }?.0 ?? .balanced
-                setSplit(destination, userInitiated: true)
+                dragOrigin = nil
+                setSplit(destination, layout: layout, userInitiated: true)
             }
     }
 
-    private func summaryHeight(
-        editor: CGFloat,
-        balanced: CGFloat,
-        semiExpanded: CGFloat,
-        visual: CGFloat
-    ) -> CGFloat {
-        switch split {
-        case .editor: editor
-        case .balanced: balanced
-        case .semiExpanded: semiExpanded
-        case .visual: visual
+    private func settle(at destination: WorkspaceSplit, layout: WorkspaceLayout) {
+        withAnimation(reduceMotion ? nil : ForecastMotion.workspace) {
+            summaryHeight = layout.summaryHeight(for: destination)
         }
     }
 
@@ -743,119 +739,44 @@ private struct PlanWorkspace: View {
         return markers
     }
 
-    private func setSplit(_ newSplit: WorkspaceSplit, userInitiated: Bool = false) {
-        if reduceMotion {
+    private func setSplit(_ newSplit: WorkspaceSplit, layout: WorkspaceLayout, userInitiated: Bool = false) {
+        withAnimation(reduceMotion ? nil : ForecastMotion.workspace) {
+            summaryHeight = layout.summaryHeight(for: newSplit)
             split = newSplit
-        } else {
-            withAnimation(ForecastMotion.scale) {
-                split = newSplit
-            }
-        }
-        if userInitiated {
-            userChangedSplit(newSplit)
+            if userInitiated { userChangedSplit(newSplit) }
         }
     }
 }
 
-private struct FluidWorkspaceDivider: View {
+private struct WorkspaceDivider: View {
     let tint: Color
-    let dragTranslation: CGFloat
-    let split: WorkspaceSplit
-
-    @State private var idlePhase: CGFloat = 0
+    let isDragging: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var isDragging: Bool { abs(dragTranslation) > 0.5 }
-
     var body: some View {
-        GeometryReader { geometry in
-            let handleOffset = min(max(dragTranslation * 0.055, -5), 5)
-            let stretch = 1 + min(abs(dragTranslation) / 520, 0.16)
+        ZStack {
+            Rectangle()
+                .fill(LinearGradient(
+                    colors: [tint.opacity(0.04), tint.opacity(isDragging ? 0.64 : 0.28), tint.opacity(0.04)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ))
+                .frame(height: 1)
 
-            ZStack {
-                FluidDividerShape(phase: reduceMotion ? 0 : idlePhase, pull: dragTranslation)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                tint.opacity(0.03),
-                                tint.opacity(isDragging ? 0.88 : 0.44),
-                                ForecastTheme.breakEven.opacity(isDragging ? 0.78 : 0.30),
-                                ForecastTheme.target.opacity(isDragging ? 0.66 : 0.22),
-                                tint.opacity(isDragging ? 0.88 : 0.44),
-                                tint.opacity(0.03)
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        style: StrokeStyle(
-                            lineWidth: isDragging ? 2.6 : 1.35,
-                            lineCap: .round,
-                            lineJoin: .round
-                        )
-                    )
-                    .blur(radius: isDragging ? 0.55 : 0.18)
-                    .shadow(color: tint.opacity(isDragging ? 0.48 : 0.18), radius: isDragging ? 7 : 3)
-
-                FluidDividerShape(phase: reduceMotion ? 0 : idlePhase, pull: dragTranslation)
-                    .stroke(Color.white.opacity(isDragging ? 0.50 : 0.20), lineWidth: 0.55)
-
-                HStack(spacing: 3) {
-                    ForEach(0 ..< 3, id: \.self) { index in
-                        Circle()
-                            .fill(index == 1 ? tint : ForecastTheme.primaryText.opacity(0.52))
-                            .frame(width: index == 1 ? 4 : 3, height: index == 1 ? 4 : 3)
-                    }
+            HStack(spacing: 3) {
+                ForEach(0 ..< 3, id: \.self) { index in
+                    Circle()
+                        .fill(index == 1 ? tint : ForecastTheme.primaryText.opacity(0.52))
+                        .frame(width: index == 1 ? 4 : 3, height: index == 1 ? 4 : 3)
                 }
-                .frame(width: 52, height: 15)
-                .budgetGlassSurface(tint: tint, cornerRadius: 8, interactive: true)
-                .scaleEffect(x: stretch, y: isDragging ? 1.08 : 1)
-                .offset(y: handleOffset)
-                .shadow(color: tint.opacity(isDragging ? 0.30 : 0.10), radius: 7)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 5.8).repeatForever(autoreverses: false)) {
-                idlePhase = 1
+            .frame(width: isDragging && !reduceMotion ? 60 : 52, height: 18)
+            .budgetGlassSurface(tint: tint, cornerRadius: 9, interactive: true)
+            .overlay {
+                Capsule().stroke(tint.opacity(isDragging ? 0.55 : 0.18), lineWidth: 1)
             }
         }
-        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.55), trigger: split)
-    }
-}
-
-private struct FluidDividerShape: Shape {
-    var phase: CGFloat
-    var pull: CGFloat
-
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(phase, pull) }
-        set {
-            phase = newValue.first
-            pull = newValue.second
-        }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let steps = max(Int(rect.width / 5), 24)
-        let centerY = rect.midY
-        let pullAmount = min(max(pull * 0.075, -9), 9)
-        let rippleAmount = min(abs(pull) * 0.012, 2.2)
-
-        for step in 0 ... steps {
-            let progress = CGFloat(step) / CGFloat(steps)
-            let x = rect.minX + rect.width * progress
-            let distance = (progress - 0.5) / 0.23
-            let influence = exp(-(distance * distance))
-            let idleWave = sin((progress * 2 + phase * 2) * .pi) * 1.05
-            let tensionRipple = sin((progress * 4 - phase * 2) * .pi) * rippleAmount * influence
-            let y = centerY + idleWave + pullAmount * influence + tensionRipple
-
-            if step == 0 { path.move(to: CGPoint(x: x, y: y)) }
-            else { path.addLine(to: CGPoint(x: x, y: y)) }
-        }
-        return path
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isDragging)
     }
 }
 

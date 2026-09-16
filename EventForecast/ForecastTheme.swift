@@ -179,6 +179,7 @@ enum ForecastTheme {
 }
 
 enum ForecastMotion {
+    static let workspace = Animation.spring(duration: 0.32, bounce: 0)
     // Shared curves keep related surfaces moving as one system. Navigation and
     // resizing intentionally settle more slowly than direct control feedback.
     static let control = Animation.timingCurve(0.16, 1, 0.30, 1, duration: 0.36)

@@ -45,64 +45,59 @@ struct ResultSummaryView: View {
     let model: ForecastModel
     let compact: Bool
     let expanded: Bool
-    let minimized: Bool
+    let overviewProgress: CGFloat
     let availableHeight: CGFloat
     @Binding var visualization: SummaryVisualization
     let selectEditor: (EditorTab) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var metricsRevealed = true
 
     var body: some View {
         VStack(spacing: compact ? 8 : 11) {
             ForecastHeadlineMetrics(
                 model: model,
                 expanded: expanded,
-                condensed: minimized,
+                condensed: overviewProgress < 0.5,
+                overviewProgress: overviewProgress,
                 selectTarget: { selectEditor(.target) }
             )
 
             Divider().overlay(ForecastTheme.divider)
 
-            if minimized {
-                CompactVisualizationOverview(model: model, selectEditor: selectEditor)
+            ZStack(alignment: .top) {
+                if overviewProgress < 1 {
+                    CompactVisualizationOverview(model: model, selectEditor: selectEditor)
+                        .opacity(Double(1 - min(overviewProgress * 2, 1)))
+                        .allowsHitTesting(overviewProgress < 0.5)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityHidden(overviewProgress >= 0.5)
+                        .transition(.opacity)
+                }
+
+                if overviewProgress > 0 {
+                    VStack(spacing: compact ? 8 : 11) {
+                        VisualizationPager(
+                            model: model,
+                            compact: compact,
+                            expanded: expanded,
+                            availableHeight: availableHeight,
+                            visualization: $visualization,
+                            selectEditor: selectEditor
+                        )
+                        VisualMetricStrip(model: model, selectEditor: selectEditor)
+                    }
+                    .opacity(Double(max((overviewProgress - 0.35) / 0.65, 0)))
+                    .allowsHitTesting(overviewProgress >= 0.5)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityHidden(overviewProgress < 0.5)
                     .transition(.opacity)
-            } else {
-                VisualizationPager(
-                    model: model,
-                    compact: compact,
-                    expanded: expanded,
-                    availableHeight: availableHeight,
-                    visualization: $visualization,
-                    selectEditor: selectEditor
-                )
-                VisualMetricStrip(model: model, selectEditor: selectEditor)
-                    .opacity(metricsRevealed ? 1 : 0)
-                    .offset(y: metricsRevealed ? 0 : 8)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
             }
         }
         .padding(.vertical, compact ? 8 : 11)
         .frame(maxHeight: .infinity, alignment: .top)
         .animation(reduceMotion ? nil : ForecastMotion.data, value: model.persistenceSnapshot)
-        .animation(reduceMotion ? nil : ForecastMotion.scale, value: expanded)
-        .animation(reduceMotion ? nil : ForecastMotion.scale, value: minimized)
         .accessibilityElement(children: .contain)
-        .task(id: "\(visualization.rawValue)-\(expanded)-\(minimized)") {
-            guard !reduceMotion, !minimized else {
-                metricsRevealed = true
-                return
-            }
-            metricsRevealed = false
-            do {
-                try await Task.sleep(for: .milliseconds(170))
-            } catch {
-                return
-            }
-            withAnimation(ForecastMotion.reveal) {
-                metricsRevealed = true
-            }
-        }
     }
 }
 
@@ -110,7 +105,10 @@ struct ForecastHeadlineMetrics: View {
     let model: ForecastModel
     let expanded: Bool
     var condensed = false
+    var overviewProgress: CGFloat? = nil
     let selectTarget: () -> Void
+
+    private var detailProgress: CGFloat { overviewProgress ?? (condensed ? 0 : 1) }
 
     private var outcome: ForecastOutcome {
         guard model.hasForecastValues else { return .empty }
@@ -135,7 +133,7 @@ struct ForecastHeadlineMetrics: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(ForecastTheme.secondaryText)
                 Text(ForecastTheme.compactCurrency(abs(model.profit)))
-                    .font(.system(size: expanded ? 34 : (condensed ? 24 : 29), weight: .bold))
+                    .font(.system(size: expanded ? 34 : 24 + 5 * detailProgress, weight: .bold))
                     .tracking(-0.5)
                     .foregroundStyle(outcomeColor)
                     .monospacedDigit()
@@ -160,7 +158,7 @@ struct ForecastHeadlineMetrics: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(ForecastTheme.target)
                     Text(model.profitTarget > 0 ? ForecastTheme.compactCurrency(model.profitTarget) : "Set target")
-                        .font(.system(size: expanded ? 26 : (condensed ? 20 : 23), weight: .bold))
+                        .font(.system(size: expanded ? 26 : 20 + 3 * detailProgress, weight: .bold))
                         .tracking(-0.3)
                         .foregroundStyle(ForecastTheme.target)
                         .monospacedDigit()
@@ -181,7 +179,7 @@ struct ForecastHeadlineMetrics: View {
                                 : "Set profit target")
             .accessibilityHint("Opens the Target editor")
         }
-        .frame(height: expanded ? 78 : (condensed ? 52 : 66))
+        .frame(height: expanded ? 78 : 52 + 14 * detailProgress)
     }
 
     private var resultTitle: String {
@@ -354,11 +352,10 @@ private struct VisualizationPager: View {
     @Binding var visualization: SummaryVisualization
     let selectEditor: (EditorTab) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var chartRevealed = true
 
     private var chartHeight: CGFloat {
         if expanded {
-            return max(compact ? 210 : 240, availableHeight - (compact ? 190 : 210))
+            return max(compact ? 112 : 124, availableHeight - (compact ? 190 : 210))
         }
         return compact ? 112 : 124
     }
@@ -380,28 +377,11 @@ private struct VisualizationPager: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(height: chartHeight)
-            .opacity(chartRevealed ? 1 : 0.42)
-            .scaleEffect(chartRevealed ? 1 : 0.975)
-            .offset(y: chartRevealed ? 0 : 6)
             .animation(reduceMotion ? nil : ForecastMotion.data, value: model.persistenceSnapshot)
             .animation(reduceMotion ? nil : ForecastMotion.paging, value: visualization)
         }
         .sensoryFeedback(.selection, trigger: visualization)
-        .task(id: "\(visualization.rawValue)-\(expanded)") {
-            guard !reduceMotion else {
-                chartRevealed = true
-                return
-            }
-            chartRevealed = false
-            do {
-                try await Task.sleep(for: .milliseconds(70))
-            } catch {
-                return
-            }
-            withAnimation(ForecastMotion.reveal) {
-                chartRevealed = true
-            }
-        }
+
     }
 }
 

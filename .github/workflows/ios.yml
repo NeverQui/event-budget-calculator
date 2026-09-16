@@ -1,0 +1,60 @@
+name: Native iOS checks
+
+on:
+  push:
+    paths:
+      - 'EventForecast/**'
+      - 'EventForecast.xcodeproj/**'
+      - 'Package.swift'
+      - 'Tests/**'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'EventForecast/**'
+      - 'EventForecast.xcodeproj/**'
+      - 'Package.swift'
+      - 'Tests/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Test forecast and workspace logic
+        run: swift test --scratch-path "$RUNNER_TEMP/ForecastTests"
+      - name: Build Simulator app
+        run: >-
+          xcodebuild -project EventForecast.xcodeproj -scheme EventForecast
+          -configuration Debug -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/ForecastSimulator"
+          CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO build
+      - name: Build iPhone release
+        run: >-
+          xcodebuild -project EventForecast.xcodeproj -scheme EventForecast
+          -configuration Release -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/ForecastDevice"
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Package Simulator app
+        run: >-
+          ditto -c -k --sequesterRsrc --keepParent
+          "$RUNNER_TEMP/ForecastSimulator/Build/Products/Debug-iphonesimulator/EventForecast.app"
+          "$RUNNER_TEMP/EventForecast-Simulator.zip"
+      - name: Upload Simulator app
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: EventForecast-Simulator
+          path: ${{ runner.temp }}/EventForecast-Simulator.zip
+          if-no-files-found: error
+          retention-days: 14

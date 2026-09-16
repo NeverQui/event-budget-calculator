@@ -155,6 +155,7 @@ struct BudgetEditor: View {
     let compact: Bool
     let markers: [SliderMarker]
     @Binding var isItemizedExpanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var amountScale: EventScale {
         EventScale.moneyScale(for: total)
@@ -191,7 +192,7 @@ struct BudgetEditor: View {
             VStack(spacing: 0) {
                 Divider().overlay(ForecastTheme.divider)
                 Button {
-                    withAnimation(ForecastMotion.scale) {
+                    withAnimation(reduceMotion ? nil : ForecastMotion.scale) {
                         isItemizedExpanded.toggle()
                     }
                 } label: {
@@ -231,7 +232,7 @@ struct BudgetEditor: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .animation(ForecastMotion.scale, value: isItemizedExpanded)
+        .animation(reduceMotion ? nil : ForecastMotion.scale, value: isItemizedExpanded)
     }
 }
 
@@ -372,6 +373,7 @@ private struct ItemizedList: View {
     let newItemName: String
     let kind: ItemizationKind
     @State private var draggingItemID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tint: Color { kind.tint }
 
@@ -393,9 +395,9 @@ private struct ItemizedList: View {
                     SwipeToDeleteModifier(
                         itemName: item.name,
                         delete: {
-                        withAnimation(ForecastMotion.control) {
-                            items.removeAll { $0.id == item.id }
-                        }
+                            withAnimation(reduceMotion ? nil : ForecastMotion.control) {
+                                items.removeAll { $0.id == item.id }
+                            }
                         }
                     )
                 )
@@ -404,9 +406,13 @@ private struct ItemizedList: View {
                     delegate: ItemizedDropDelegate(
                         destinationID: item.id,
                         items: $items,
-                        draggingItemID: $draggingItemID
+                        draggingItemID: $draggingItemID,
+                        reduceMotion: reduceMotion
                     )
                 )
+
+                .accessibilityAction(named: "Move up") { moveItem(item.id, by: -1) }
+                .accessibilityAction(named: "Move down") { moveItem(item.id, by: 1) }
 
                 Divider().overlay(ForecastTheme.divider)
             }
@@ -423,6 +429,13 @@ private struct ItemizedList: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+    private func moveItem(_ id: UUID, by offset: Int) {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+              items.indices.contains(index + offset) else { return }
+        withAnimation(reduceMotion ? nil : ForecastMotion.control) {
+            items.swapAt(index, index + offset)
         }
     }
 }
@@ -460,6 +473,7 @@ private struct SwipeToDeleteModifier: ViewModifier {
     let itemName: String
     let delete: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settledOffset: CGFloat = 0
     @GestureState private var dragOffset: CGFloat = 0
 
@@ -504,7 +518,7 @@ private struct SwipeToDeleteModifier: ViewModifier {
                 if value.predictedEndTranslation.width < -128 {
                     performDelete()
                 } else {
-                    withAnimation(ForecastMotion.control) {
+                    withAnimation(reduceMotion ? nil : ForecastMotion.control) {
                         settledOffset = value.translation.width < -32 ? -74 : 0
                     }
                 }
@@ -512,7 +526,7 @@ private struct SwipeToDeleteModifier: ViewModifier {
     }
 
     private func performDelete() {
-        withAnimation(ForecastMotion.control) {
+        withAnimation(reduceMotion ? nil : ForecastMotion.control) {
             settledOffset = -78
             delete()
         }
@@ -523,6 +537,7 @@ private struct ItemizedDropDelegate: DropDelegate {
     let destinationID: UUID
     @Binding var items: [MoneyItem]
     @Binding var draggingItemID: UUID?
+    let reduceMotion: Bool
 
     func dropEntered(info: DropInfo) {
         guard let draggingItemID,
@@ -531,7 +546,7 @@ private struct ItemizedDropDelegate: DropDelegate {
               let destinationIndex = items.firstIndex(where: { $0.id == destinationID })
         else { return }
 
-        withAnimation(ForecastMotion.control) {
+        withAnimation(reduceMotion ? nil : ForecastMotion.control) {
             items.move(
                 fromOffsets: IndexSet(integer: sourceIndex),
                 toOffset: destinationIndex > sourceIndex ? destinationIndex + 1 : destinationIndex
@@ -616,6 +631,7 @@ struct AdaptiveValueControl: View {
                         .multilineTextAlignment(.center)
                         .monospacedDigit()
                         .focused($isFocused)
+                        .accessibilityLabel("\(controlTitle) value")
                     if let suffix {
                         Text(suffix).foregroundStyle(ForecastTheme.secondaryText)
                     }
@@ -671,6 +687,8 @@ struct AdaptiveValueControl: View {
         }
     }
 
+    private var controlTitle: String { editableTitle?.wrappedValue ?? title }
+
     private func stepButton(systemImage: String, delta: Double) -> some View {
         Button {
             adjustValue(by: delta)
@@ -686,7 +704,7 @@ struct AdaptiveValueControl: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(systemImage == "plus" ? "Increase" : "Decrease") \(title)")
+        .accessibilityLabel("\(systemImage == "plus" ? "Increase" : "Decrease") \(controlTitle)")
         .accessibilityHint("Changes by \(shortValue(buttonStep))")
     }
 
@@ -719,7 +737,7 @@ struct AdaptiveValueControl: View {
                     step: effectiveSliderStep,
                     onEditingChanged: handleSliderEditing
                 ) {
-                    Text(title)
+                    Text(controlTitle)
                 }
                 .modifier(ValueSliderStyle(tint: tint, accessibilityValue: accessibilityValue))
                 .modifier(BudgetSliderGlassModifier(tint: tint))
@@ -729,7 +747,7 @@ struct AdaptiveValueControl: View {
                     in: 0 ... 1,
                     onEditingChanged: handleSliderEditing
                 ) {
-                    Text(title)
+                    Text(controlTitle)
                 }
                 .modifier(ValueSliderStyle(tint: tint, accessibilityValue: accessibilityValue))
                 .modifier(BudgetSliderGlassModifier(tint: tint))

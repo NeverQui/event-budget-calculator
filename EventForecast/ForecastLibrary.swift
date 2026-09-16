@@ -290,7 +290,7 @@ final class ForecastLibrary {
     func saveActive(from model: ForecastModel) {
         guard let activeRecord else { return }
         _ = saveCurrent(
-            named: activeRecord.name,
+            named: workingName,
             eventDate: activeRecord.eventDate,
             eventEndDate: activeRecord.eventEndDate,
             eventDateApplies: activeRecord.eventDateApplies,
@@ -334,7 +334,7 @@ final class ForecastLibrary {
 
     func commitWorkingName() {
         workingName = normalizedName(workingName)
-        if let activeRecordID {
+        if isAutoSaveEnabled, let activeRecordID {
             rename(activeRecordID, to: workingName)
         }
     }

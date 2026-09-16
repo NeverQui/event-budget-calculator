@@ -182,7 +182,7 @@ final class ForecastModel {
     var capacity: Double = 120 {
         didSet {
             attendance = min(attendance, capacity)
-            updateScaleForCapacity()
+            if !isApplyingSnapshot { updateScaleForCapacity() }
             scheduleHistoryRecord()
         }
     }
@@ -259,19 +259,15 @@ final class ForecastModel {
     }
 
     var breakEvenTickets: Int? {
-        guard ticketPrice > 0 else { return nil }
-        let requiredTicketRevenue = max(totalExpenses - additionalRevenue, 0)
-        return Int(ceil(requiredTicketRevenue / ticketPrice))
+        ticketsRequired(for: totalExpenses)
     }
 
     var breakEvenTicketPrice: Double? {
-        guard ticketsSold > 0 else { return nil }
-        return max((totalExpenses - additionalRevenue) / Double(ticketsSold), 0)
+        priceRequired(for: totalExpenses)
     }
 
     var targetTicketPrice: Double? {
-        guard ticketsSold > 0 else { return nil }
-        return max((totalExpenses + profitTarget - additionalRevenue) / Double(ticketsSold), 0)
+        priceRequired(for: totalExpenses + profitTarget)
     }
 
     var recommendedTicketPrice: Double? {
@@ -292,9 +288,24 @@ final class ForecastModel {
     }
 
     var profitTargetTickets: Int? {
-        guard profitTarget > 0, ticketPrice > 0 else { return nil }
-        let requiredTicketRevenue = max(requiredRevenueForProfitTarget - additionalRevenue, 0)
-        return Int(ceil(requiredTicketRevenue / ticketPrice))
+        guard profitTarget > 0 else { return nil }
+        return ticketsRequired(for: requiredRevenueForProfitTarget)
+    }
+
+    private func ticketsRequired(for revenue: Double) -> Int? {
+        let required = max(revenue - additionalRevenue, 0)
+        guard required > 0 else { return 0 }
+        guard ticketPrice > 0 else { return nil }
+        let tickets = ceil(required / ticketPrice)
+        guard tickets.isFinite, tickets < Double(Int.max) else { return nil }
+        return Int(tickets)
+    }
+
+    private func priceRequired(for revenue: Double) -> Double? {
+        let required = max(revenue - additionalRevenue, 0)
+        guard required > 0 else { return 0 }
+        guard ticketsSold > 0 else { return nil }
+        return required / Double(ticketsSold)
     }
 
     var revenueItemizedTotal: Double {
@@ -332,8 +343,8 @@ final class ForecastModel {
     }
 
     func selectScale(_ newScale: EventScale) {
-        scale = newScale
         capacity = min(capacity, newScale.capacityRange.upperBound)
+        scale = newScale
     }
 
     func useRecommendedTicketPrice() {

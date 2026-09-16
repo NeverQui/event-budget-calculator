@@ -16,6 +16,7 @@
 		B10000000000000000000007 /* ForecastLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* ForecastLibrary.swift */; };
 		B10000000000000000000008 /* ForecastReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* ForecastReportView.swift */; };
 		B10000000000000000000009 /* EventLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* EventLibraryView.swift */; };
+		B1000000000000000000000A /* WorkspaceLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* WorkspaceLayout.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		A10000000000000000000009 /* ForecastLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastLibrary.swift; sourceTree = "<group>"; };
 		A1000000000000000000000A /* ForecastReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastReportView.swift; sourceTree = "<group>"; };
 		A1000000000000000000000B /* EventLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLibraryView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000C /* WorkspaceLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceLayout.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +60,7 @@
 				A10000000000000000000002 /* ForecastModel.swift */,
 				A10000000000000000000003 /* ForecastTheme.swift */,
 				A10000000000000000000004 /* ForecastView.swift */,
+				A1000000000000000000000C /* WorkspaceLayout.swift */,
 				A10000000000000000000005 /* ResultSummaryView.swift */,
 				A10000000000000000000006 /* Editors.swift */,
 				A10000000000000000000009 /* ForecastLibrary.swift */,
@@ -148,6 +151,7 @@
 				B10000000000000000000002 /* ForecastModel.swift in Sources */,
 				B10000000000000000000003 /* ForecastTheme.swift in Sources */,
 				B10000000000000000000004 /* ForecastView.swift in Sources */,
+				B1000000000000000000000A /* WorkspaceLayout.swift in Sources */,
 				B10000000000000000000005 /* ResultSummaryView.swift in Sources */,
 				B10000000000000000000006 /* Editors.swift in Sources */,
 				B10000000000000000000007 /* ForecastLibrary.swift in Sources */,
