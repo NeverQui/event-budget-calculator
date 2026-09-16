@@ -25,6 +25,7 @@ The review fixes these edge cases:
 - Selecting, restoring, or undoing an event scale preserves that scale.
 - Manual-save name edits wait for Save. Auto-save uses the current working name rather than replacing it with the old saved name.
 - Itemized controls expose meaningful labels and accessible reorder actions.
+- The compact pie chart sizes itself to the space below the totals, so its bottom edge stays visible on short screens. Compact input spacing also keeps the final slider clear of the bottom bar.
 
 ## Verification
 
@@ -42,7 +43,7 @@ xcodebuild -project EventForecast.xcodeproj -scheme EventForecast \
   -derivedDataPath /tmp/EventForecastBuild CODE_SIGNING_ALLOWED=NO build
 ```
 
-The suite covers financial thresholds, itemization, undo/redo, save behavior, scale restoration, persistence, ordered resize stops, bounds, and flick projection. Simulator interaction checks cover drag/release in both directions, tap stops, chart/editor navigation, accessibility labels, and Reduce Motion. These checks do not establish device frame rates.
+The suite covers financial thresholds, itemization, undo/redo, save behavior, scale restoration, persistence, ordered resize stops, bounds, and flick projection. iPhone 16 Pro and iPhone SE Simulator checks cover drag/release in both directions, tap stops, chart/editor navigation, and compact chart/input bounds. Named accessibility actions, ledger reorder/Undo, and the system Reduce Motion setting were also checked. These checks do not establish device frame rates.
 
 ## Apple references
 

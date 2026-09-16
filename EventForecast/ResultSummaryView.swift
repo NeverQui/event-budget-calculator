@@ -52,6 +52,14 @@ struct ResultSummaryView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var compactOverviewHeight: CGFloat {
+        let headlineHeight: CGFloat = expanded ? 78 : 52 + 14 * overviewProgress
+        // Reserve the headline, divider, two gaps, and vertical padding before
+        // sizing the overview. A fixed 76-point chart overflows short screens.
+        let spacingAndPadding: CGFloat = compact ? 32 : 44
+        return min(76, max(availableHeight - headlineHeight - 1 - spacingAndPadding, 0))
+    }
+
     var body: some View {
         VStack(spacing: compact ? 8 : 11) {
             ForecastHeadlineMetrics(
@@ -66,7 +74,11 @@ struct ResultSummaryView: View {
 
             ZStack(alignment: .top) {
                 if overviewProgress < 1 {
-                    CompactVisualizationOverview(model: model, selectEditor: selectEditor)
+                    CompactVisualizationOverview(
+                        model: model,
+                        height: compactOverviewHeight,
+                        selectEditor: selectEditor
+                    )
                         .opacity(Double(1 - min(overviewProgress * 2, 1)))
                         .allowsHitTesting(overviewProgress < 0.5)
                         .accessibilityElement(children: .contain)
@@ -215,12 +227,14 @@ struct ForecastHeadlineMetrics: View {
 
 private struct CompactVisualizationOverview: View {
     let model: ForecastModel
+    let height: CGFloat
     let selectEditor: (EditorTab) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
             BudgetMixChart(model: model, expanded: false)
-                .frame(width: 88, height: 74)
+                .frame(width: min(74, height), height: min(74, height))
+                .frame(width: 88)
 
             Divider().overlay(ForecastTheme.divider)
 
@@ -230,7 +244,7 @@ private struct CompactVisualizationOverview: View {
                 metric("Expenses", value: model.totalExpenses, color: ForecastTheme.expense, editor: .expenses)
             }
         }
-        .frame(height: 76)
+        .frame(height: height)
         .accessibilityElement(children: .contain)
     }
 

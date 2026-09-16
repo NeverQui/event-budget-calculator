@@ -596,7 +596,7 @@ struct AdaptiveValueControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: compact ? 12 : 14) {
+        VStack(spacing: compact ? 8 : 14) {
             HStack(spacing: 6) {
                 if let leadingColor {
                     Circle()
