@@ -25,7 +25,7 @@ The review fixes these edge cases:
 - Selecting, restoring, or undoing an event scale preserves that scale.
 - Manual-save name edits wait for Save. Auto-save uses the current working name rather than replacing it with the old saved name.
 - Itemized controls expose meaningful labels and accessible reorder actions.
-- The compact pie chart sizes itself to the space below the totals, so its bottom edge stays visible on short screens. Compact input spacing also keeps the final slider clear of the bottom bar.
+- The compact pie chart keeps its original width in a square frame. The summary reserves enough height for the whole chart rather than clipping or shrinking it. Compact input spacing also keeps the final slider clear of the bottom bar.
 
 ## Verification
 

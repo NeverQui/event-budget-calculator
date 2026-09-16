@@ -6,8 +6,8 @@ struct TicketsEditor: View {
     let compact: Bool
 
     var body: some View {
-        VStack(spacing: compact ? 8 : 12) {
-            PricingGuide(model: model)
+        VStack(spacing: compact ? 4 : 12) {
+            PricingGuide(model: model, compact: compact)
 
             AdaptiveValueControl(
                 title: "Ticket price",
@@ -75,6 +75,7 @@ struct TicketsEditor: View {
 
 private struct PricingGuide: View {
     let model: ForecastModel
+    let compact: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -97,7 +98,7 @@ private struct PricingGuide: View {
                 action: model.useTargetTicketPrice
             )
         }
-        .frame(minHeight: 54)
+        .frame(minHeight: compact ? 44 : 54)
     }
 
     private func priceOption(
@@ -596,7 +597,7 @@ struct AdaptiveValueControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: compact ? 8 : 14) {
+        VStack(spacing: compact ? 4 : 14) {
             HStack(spacing: 6) {
                 if let leadingColor {
                     Circle()
@@ -663,7 +664,7 @@ struct AdaptiveValueControl: View {
                     }
                 }
         }
-        .padding(.vertical, compact ? 2 : 4)
+        .padding(.vertical, compact ? 1 : 4)
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.46)
         .onAppear { syncDraft() }

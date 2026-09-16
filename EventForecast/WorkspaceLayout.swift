@@ -26,8 +26,10 @@ struct WorkspaceLayout: Equatable {
 
     let height: CGFloat
     var compact: Bool { height < 660 }
-    var editor: CGFloat { min(compact ? 164 : 176, height * 0.27) }
-    var balanced: CGFloat { min(compact ? 304 : 326, height * 0.54, visual) }
+    // Fit the headline, the full 88-point pie, and their spacing. A percentage
+    // of the workspace can be shorter than this content and clip the chart.
+    var editor: CGFloat { min(compact ? 176 : 188, visual) }
+    var balanced: CGFloat { max(editor, min(compact ? 304 : 326, height * 0.54, visual)) }
     var visual: CGFloat { max(height - Self.handleHeight, 0) }
     var semiExpanded: CGFloat {
         max(balanced, min(height * 0.75, visual - (compact ? 124 : 140)))
